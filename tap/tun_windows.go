@@ -1,7 +1,7 @@
 package tap
 
 import (
-    "github.com/songgao/water"
+    "github.com/k8shop/water"
     "io"
 )
 

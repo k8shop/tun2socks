@@ -1,8 +1,9 @@
 package tun2socks
 
 import (
+    "fmt"
     "io"
-    "log"
+    "log/slog"
 
     "gvisor.dev/gvisor/pkg/buffer"
     "gvisor.dev/gvisor/pkg/tcpip"
@@ -12,42 +13,31 @@ import (
     "gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
-// 1500 - ipHeader - tcpHeader - tcpTimestamp - packetCustomHeader
-const PAYLOAD = 1500 - 20 - 20 - 12 - 8
-const MTU = PAYLOAD + 20 + 20
-
 type endpoint struct {
+    mtu uint32
     tun io.ReadWriteCloser
+    closeAction func()
+    stopGoroutine chan any
 }
 
-func (e *endpoint) SetMTU(mtu uint32) {
-    // TODO implement me
-    panic("implement me")
+func NewEndpoint(tun io.ReadWriteCloser) *endpoint {
+    return &endpoint{tun: tun, mtu: 1500}
 }
 
-func (e *endpoint) SetLinkAddress(addr tcpip.LinkAddress) {
-    // TODO implement me
-    panic("implement me")
+// space reserved for front header.
+// Tun has none link-layer header, just returns 0.
+func (e *endpoint) MaxHeaderLength() uint16 {
+    return 0
 }
 
 func (e *endpoint) AddHeader(packetBuffer *stack.PacketBuffer) {
-    // TODO implement me
-    // panic("implement me")
+    // add link-layer header
 }
 
 func (e *endpoint) ParseHeader(packetBuffer *stack.PacketBuffer) bool {
-    // TODO implement me
-    panic("implement me")
-}
-
-func (e *endpoint) Close() {
-    // TODO implement me
-    // panic("implement me")
-}
-
-func (e *endpoint) SetOnCloseAction(f func()) {
-    // TODO implement me
-    // panic("implement me")
+    // stack.WriteRawPacket
+    // check if header is correct
+    return true
 }
 
 func (e *endpoint) ARPHardwareType() header.ARPHardwareType {
@@ -55,16 +45,24 @@ func (e *endpoint) ARPHardwareType() header.ARPHardwareType {
 }
 
 func (e *endpoint) MTU() uint32 {
-    return MTU
+    return e.mtu
+}
+
+func (e *endpoint) SetMTU(mtu uint32) {
+    e.mtu = mtu
 }
 
 func (e *endpoint) Capabilities() stack.LinkEndpointCapabilities {
-    return stack.CapabilityNone
+    return stack.CapabilityLoopback |
+        stack.CapabilitySaveRestore |
+        stack.CapabilityDisconnectOk |
+        stack.CapabilityResolutionRequired |
+        stack.CapabilityTXChecksumOffload |
+        stack.CapabilityRXChecksumOffload
 }
 
-// Tun has none link-layer header, just returns 0.
-func (e *endpoint) MaxHeaderLength() uint16 {
-    return 0
+func (e *endpoint) SetLinkAddress(addr tcpip.LinkAddress) {
+    panic(ErrNotSupported)
 }
 
 // Mac address is required by ICMPv6
@@ -75,47 +73,73 @@ func (e *endpoint) LinkAddress() tcpip.LinkAddress {
 }
 
 func (e *endpoint) WritePackets(list stack.PacketBufferList) (n int, err tcpip.Error) {
+    var bs []byte
     for _, pb := range list.AsSlice() {
-        nw, err := e.tun.Write(pb.ToView().AsSlice())
+
+        slices := pb.AsSlices()
+        if len(slices) == 1 {
+            bs = slices[0]
+        } else {
+            // Naming convention
+            // AsXxx: no-copy
+            // ToXxx: copy
+            bs = pb.ToView().AsSlice()
+        }
+
+        nw, err := e.tun.Write(bs)
+        n += nw
         if nil != err {
-            log.Println(err)
+            slog.Error(err.Error())
             return n, &tcpip.ErrInvalidEndpointState{}
         } else if nw != pb.Size() {
             panic(io.ErrShortWrite)
         }
-        n += pb.Size()
-        // pb.DecRef()
     }
     return
 }
 
 func (e *endpoint) Attach(dispatcher stack.NetworkDispatcher) {
+    // Attach is called with a nil dispatcher when the endpoint's NIC is being removed.
+    // See more docs of interface:
+    // stack.NetworkLinkEndpoint
+    if nil == dispatcher {
+        e.stopGoroutine = make(chan any)
+        e.tun.Close()
+        return
+    }
+
     go func(tun io.Reader) {
         for {
-            v := buffer.NewViewSize(MTU)
+            v := buffer.NewViewSize(int(e.mtu))
             nr, err := tun.Read(v.AsSlice())
             if nil != err {
-                log.Println(err)
+                // Once tun is closed, tun.Read() ends with error, the loop break.
+                if nil != e.stopGoroutine {
+                    close(e.stopGoroutine)
+                    slog.Info("tun closed")
+                } else {
+                    slog.Error(err.Error())
+                }
                 break
             }
 
             v.CapLength(nr)
 
-            pb := stack.NewPacketBuffer(stack.PacketBufferOptions{
-                Payload: buffer.MakeWithView(v),
-                OnRelease: func() {
-                    // log.Println("test ok OnRelease")
-                }})
+            pb := stack.NewPacketBuffer(stack.PacketBufferOptions{Payload: buffer.MakeWithView(v)})
 
-            if 0x40 == v.AsSlice()[0]&0xf0 {
+            switch header.IPVersion(v.AsSlice()) {
+            // 0x40 == v.AsSlice()[0]&0xf0
+            case header.IPv4Version:
                 dispatcher.DeliverNetworkPacket(ipv4.ProtocolNumber, pb)
-                // log.Println("tcp4", v.Size())
-            } else {
+            // 0x60 == v.AsSlice()[0]&0xf0
+            case header.IPv6Version:
+                dispatcher.DeliverNetworkPacket(ipv6.ProtocolNumber, pb)
+            default:
+                slog.Error(fmt.Sprintf("ProtocolNumber Unknown %X", v.AsSlice()[0]))
                 // https://en.wikipedia.org/wiki/List_of_IP_Protocol_numbers
                 // header.IPv6(v).TransportProtocol() == header.ICMPv6ProtocolNumber
-                dispatcher.DeliverNetworkPacket(ipv6.ProtocolNumber, pb)
-                // log.Println("tcp6", v.Size())
             }
+
             pb.DecRef()
         }
     }(e.tun)
@@ -125,8 +149,16 @@ func (e *endpoint) IsAttached() bool {
     panic(ErrNotSupported)
 }
 
-// Called by Stack.Wait()
-// Once tun is closed, tun.Read(v) return error, the loop in Attach() break.
 func (e *endpoint) Wait() {
-    e.tun.Close()
+    <- e.stopGoroutine
+}
+
+func (e *endpoint) SetOnCloseAction(f func()) {
+    if nil != f {
+        e.closeAction = f
+    }
+}
+
+func (e *endpoint) Close() {
+    e.closeAction()
 }

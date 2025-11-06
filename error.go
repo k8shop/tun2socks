@@ -26,4 +26,4 @@ var ErrNotSupported = errors.New("not supported")
 
 // var ErrClosedPipe = io.ErrClosedPipe
 // Keep log silent just like io.EOF
-var ErrClosedPipe error = nil
+// var ErrClosedPipe error = nil

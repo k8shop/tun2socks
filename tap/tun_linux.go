@@ -3,7 +3,7 @@ package tap
 import (
     "io"
 
-    "github.com/songgao/water"
+    "github.com/k8shop/water"
 )
 
 func OpenTunDevice(name, addr, gw, mask string, dnsServers []string, persist bool) (io.ReadWriteCloser, error) {

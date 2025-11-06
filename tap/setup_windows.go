@@ -3,20 +3,23 @@ package tap
 import (
     "bufio"
     "bytes"
-    "cnfix/base"
     "fmt"
     "io"
     "log"
     "os"
+
     "os/exec"
     "path/filepath"
+
+    "github.com/k8shop/systool"
+    "github.com/k8shop/tun2socks"
 )
 
-func Open() (t2s io.Closer) {
+func Open(handler tun2socks.TransportHandler) (t2s io.Closer) {
 
     flagParse()
     check()
-    t2s = open()
+    t2s = open(handler)
     setup()
 
     return
@@ -24,7 +27,7 @@ func Open() (t2s io.Closer) {
 
 func addAdapter() {
     dir := filepath.Dir(os.Args[0])
-    base.CmdOut(
+    systool.CmdOut(
         "powershell",
         fmt.Sprintf(
             `Start-Process -Verb RunAs -FilePath '%s' -ArgumentList 'install "%s" tap0901' -Wait -WindowStyle Hidden`,
@@ -42,7 +45,7 @@ func findAdapter() string {
     // Get-NetAdapter | Format-List
     // Get-NetAdapter | Format-Custom
     // Get-NetAdapter | Select-Object -Property ComponentID
-    out := base.CmdOut(
+    out := systool.CmdOut(
         "powershell",
         `Get-NetAdapter -InterfaceDescription "TAP-Windows Adapter V*" | Format-Table Name -HideTableHeaders`,
     )
@@ -88,14 +91,14 @@ func check() {
         // file.Write(names[0])
         // file.WriteString("\" newname=cnfix")
         // file.Close()
-        // base.CmdOut(
+        // systool.CmdOut(
         //     file.Name(),
         //     // "powershell",
         //     // fmt.Sprintf("Start-Process -Verb RunAs -FilePath '%s' -Wait -WindowStyle Hidden", file.Name()),
         //     // 奇怪，执行 bat 本身不需要超管权限，使用 Start-Process 不加 -Verb RunAs 则失败
         // )
 
-        base.CmdOut(
+        systool.CmdOut(
             "cmd",
             "/c",
             // 参数包含空格，涉及双引号语法解析的，要借助 cmd 才可以
@@ -123,7 +126,7 @@ func check() {
     // fmt.Println(dnsMatch)
 
     if nil != dhcpEnabled {
-        base.CmdBat(
+        systool.CmdBat(
             true,
             fmt.Sprintf("netsh interface ipv4 set address name=%s source=dhcp store=persistent", cfgTunName),
             fmt.Sprintf("netsh interface ipv4 set dnsservers name=%s source=dhcp register=none validate=no", cfgTunName),
@@ -133,7 +136,7 @@ func check() {
 
 func setup() {
 
-    out := base.CmdOut(
+    out := systool.CmdOut(
         "powershell",
         fmt.Sprintf("Find-NetRoute -RemoteIPAddress %s | Format-Table NextHop -HideTableHeaders", cfgGateway),
     )
@@ -143,7 +146,7 @@ func setup() {
         return
     }
 
-    out = base.CmdOut(
+    out = systool.CmdOut(
         "powershell",
         "Find-NetRoute -RemoteIPAddress 8.8.8.8 | Format-Table NextHop,InterfaceMetric -HideTableHeaders",
     )
@@ -165,7 +168,7 @@ func setup() {
     // _, err = fmt.Fprintf(file, "route -p delete 0.0.0.0 %s \r\n", cfgGateway)
     // _, err = file.Write("if %errorlevel% neq 0 exit /b %errorlevel% \r\n")
 
-    base.CmdBat(
+    systool.CmdBat(
         true,
         fmt.Sprintf("route add 0.0.0.0/0 %s", cfgGateway),
         fmt.Sprintf("route -p add 0.0.0.0/0 %s", cfgGateway),

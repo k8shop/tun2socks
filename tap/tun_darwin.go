@@ -6,7 +6,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/songgao/water"
+	"github.com/k8shop/water"
 )
 
 // func isIPv4(ip net.IP) bool {

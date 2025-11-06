@@ -2,7 +2,8 @@ module github.com/k8shop/tun2socks
 
 go 1.25.3
 
-require gvisor.dev/gvisor v0.0.0-20251031020517-ecfcdd2f171c
+require gvisor.dev/gvisor v0.0.0-20251114082540-5928db6b1cc3
+require github.com/k8shop/water v1.0.0
 
 // gvisor默认下载的版本是master分支，
 // 该分支有包重复定义报错问题 (Found several packages in xxx)

@@ -1,9 +1,8 @@
 package main
 
-import "cnfix/tap"
 
 func main() {
-    tap.Open()
+    // tap.Open()
     // t2s := tap.Open()
     // chSignal := make(chan os.Signal)
     // signal.Notify(chSignal, os.Interrupt, syscall.SIGTERM)
