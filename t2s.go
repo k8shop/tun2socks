@@ -49,7 +49,7 @@ func New(tun io.ReadWriteCloser, th TransportHandler) *Tun2socks {
         var wq waiter.Queue
         ep, err := r.CreateEndpoint(&wq)
         if nil != err {
-            slog.Error(err.String())
+            slog.Debug(err.String(), "tcp", r.ID())
             r.Complete(true)
             return
         }
@@ -61,7 +61,7 @@ func New(tun io.ReadWriteCloser, th TransportHandler) *Tun2socks {
         var wq waiter.Queue
         ep, err := r.CreateEndpoint(&wq)
         if nil != err {
-            slog.Error(err.String())
+            slog.Debug(err.String(), "udp", r.ID())
             return false
         }
         t2s.th.HandleUDP(gonet.NewUDPConn(&wq, ep))

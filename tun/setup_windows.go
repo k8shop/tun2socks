@@ -1,15 +1,10 @@
-package tap
+package tun
 
 import (
-    "bufio"
     "bytes"
     "fmt"
     "io"
-    "log"
-    "os"
-
-    "os/exec"
-    "path/filepath"
+    "log/slog"
 
     "github.com/k8shop/systool"
     "github.com/k8shop/tun2socks"
@@ -18,13 +13,14 @@ import (
 func Open(handler tun2socks.TransportHandler) (t2s io.Closer) {
 
     flagParse()
-    check()
+    // check()
     t2s = open(handler)
     setup()
 
     return
 }
 
+/*
 func addAdapter() {
     dir := filepath.Dir(os.Args[0])
     systool.CmdOut(
@@ -125,6 +121,7 @@ func check() {
     // ).Run()
     // fmt.Println(dnsMatch)
 
+    // Tap-Windows 配置 IP/DNS 需要 DHCP 支持
     if nil != dhcpEnabled {
         systool.CmdBat(
             true,
@@ -133,16 +130,17 @@ func check() {
         )
     }
 }
+*/
 
 func setup() {
 
     out := systool.CmdOut(
         "powershell",
-        fmt.Sprintf("Find-NetRoute -RemoteIPAddress %s | Format-Table NextHop -HideTableHeaders", cfgGateway),
+        fmt.Sprintf("Find-NetRoute -RemoteIPAddress %s | Format-Table IPAddress -HideTableHeaders", cfgGateway),
     )
 
-    if "0.0.0.0" != string(bytes.TrimSpace(out)) {
-        log.Println("TAP-Windows Adapter configuration failed,", "none expected network", cfgNetwork)
+    if cfgIp != string(bytes.TrimSpace(out)) {
+        slog.Error("Wintun Adapter is Unavailable", "network", cfgNetwork)
         return
     }
 
@@ -154,13 +152,13 @@ func setup() {
     fields := bytes.Fields(out)
 
     if len(fields) != 2 {
-        log.Fatalln("None default routes found.")
-    }
-
-    // Metric 值的数字字符串
-    // 懒得转换，直接判断是几位数即可
-    if cfgGateway == string(fields[0]) && len(fields[1]) == 1 {
-        return
+        slog.Warn("None default routes found.")
+    } else {
+        // Metric 值的数字字符串
+        // 懒得转换，直接判断是几位数即可
+        if cfgGateway == string(fields[0]) && len(fields[1]) == 1 {
+            return
+        }
     }
 
     // _, err = fmt.Fprintf(file, "netsh interface ipv4 set address name=%s source=static address=%s gateway=%s gwmetric=1 store=active \r\n", cfgTunName, cfgNetwork, cfgGateway)
@@ -170,6 +168,9 @@ func setup() {
 
     systool.CmdBat(
         true,
+        // 添加路由的两个命令，功能不一样，不可以混用
+        // route add x.x.x.x/x gateway 网关转发
+        // route add x.x.x.x/x localIP 在链路上
         fmt.Sprintf("route add 0.0.0.0/0 %s", cfgGateway),
         fmt.Sprintf("route -p add 0.0.0.0/0 %s", cfgGateway),
         fmt.Sprintf("netsh interface ipv4 set interface interface=%s metric=1", cfgTunName),

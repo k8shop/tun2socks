@@ -1,7 +1,6 @@
 package tun2socks
 
 import (
-    "fmt"
     "io"
     "log/slog"
 
@@ -53,12 +52,7 @@ func (e *endpoint) SetMTU(mtu uint32) {
 }
 
 func (e *endpoint) Capabilities() stack.LinkEndpointCapabilities {
-    return stack.CapabilityLoopback |
-        stack.CapabilitySaveRestore |
-        stack.CapabilityDisconnectOk |
-        stack.CapabilityResolutionRequired |
-        stack.CapabilityTXChecksumOffload |
-        stack.CapabilityRXChecksumOffload
+    return stack.CapabilityNone
 }
 
 func (e *endpoint) SetLinkAddress(addr tcpip.LinkAddress) {
@@ -130,14 +124,25 @@ func (e *endpoint) Attach(dispatcher stack.NetworkDispatcher) {
             switch header.IPVersion(v.AsSlice()) {
             // 0x40 == v.AsSlice()[0]&0xf0
             case header.IPv4Version:
+                // 可以观察到大包被分片
+                // UDP协议栈没有复杂逻辑，就是收发数据 + 分片重组
+                // 相比之下，TCP是个"状态机怪兽"
+                // if header.IPv4(v.AsSlice()).DestinationAddress().String() == "x.x.x.x" {}
                 dispatcher.DeliverNetworkPacket(ipv4.ProtocolNumber, pb)
             // 0x60 == v.AsSlice()[0]&0xf0
             case header.IPv6Version:
                 dispatcher.DeliverNetworkPacket(ipv6.ProtocolNumber, pb)
             default:
-                slog.Error(fmt.Sprintf("ProtocolNumber Unknown %X", v.AsSlice()[0]))
-                // https://en.wikipedia.org/wiki/List_of_IP_Protocol_numbers
+                // https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
+                // header.IPv6(v).TransportProtocol() == header.TCPProtocolNumber
+                // header.IPv6(v).TransportProtocol() == header.UDPProtocolNumber
+                // header.IPv6(v).TransportProtocol() == header.IGMPProtocolNumber
+                // header.IPv6(v).TransportProtocol() == header.ICMPv4ProtocolNumber
                 // header.IPv6(v).TransportProtocol() == header.ICMPv6ProtocolNumber
+                panic(ErrNotSupported)
+                // header.ARPProtocolNumber
+                // header.IPv4ProtocolNumber
+                // header.IPv6ProtocolNumber
             }
 
             pb.DecRef()

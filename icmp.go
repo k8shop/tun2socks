@@ -82,6 +82,10 @@ func (conn *ICMPConn) SetReadDeadline(time.Time) error {
     return nil
 }
 
+func (conn *ICMPConn) SetWriteDeadline(time.Time) error {
+    return nil
+}
+
 func (conn *ICMPConn) Read(buf []byte) (int, error) {
     var datagram []byte
     timer := time.NewTimer(3*time.Second)

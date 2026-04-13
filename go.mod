@@ -2,7 +2,7 @@ module github.com/k8shop/tun2socks
 
 go 1.25.3
 
-require gvisor.dev/gvisor v0.0.0-20251114082540-5928db6b1cc3
+require gvisor.dev/gvisor v0.0.0-20260413194555-9680d69bf798
 require github.com/k8shop/water v1.0.0
 
 // gvisor默认下载的版本是master分支，
@@ -24,3 +24,5 @@ require (
 	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 )
+
+//replace gvisor.dev/gvisor => github.com/google/gvisor go
