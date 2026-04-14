@@ -156,9 +156,9 @@ func setup() {
     } else {
         // Metric 值的数字字符串
         // 懒得转换，直接判断是几位数即可
-        if cfgGateway == string(fields[0]) && len(fields[1]) == 1 {
-            return
-        }
+        // if cfgGateway == string(fields[0]) && len(fields[1]) == 1 {
+        //     return
+        // }
     }
 
     // _, err = fmt.Fprintf(file, "netsh interface ipv4 set address name=%s source=static address=%s gateway=%s gwmetric=1 store=active \r\n", cfgTunName, cfgNetwork, cfgGateway)
@@ -171,10 +171,10 @@ func setup() {
         // 添加路由的两个命令，功能不一样，不可以混用
         // route add x.x.x.x/x gateway 网关转发
         // route add x.x.x.x/x localIP 在链路上
-        fmt.Sprintf("route add 0.0.0.0/0 %s", cfgGateway),
-        fmt.Sprintf("route -p add 0.0.0.0/0 %s", cfgGateway),
-        fmt.Sprintf("netsh interface ipv4 set interface interface=%s metric=1", cfgTunName),
-        fmt.Sprintf("netsh interface ipv4 set interface interface=%s metric=1 store=persistent", cfgTunName),
+        fmt.Sprintf("route add 0.0.0.0/0 %s METRIC 1", cfgGateway),
+        fmt.Sprintf("route -p add 0.0.0.0/0 %s METRIC 1", cfgGateway),
+        fmt.Sprintf("netsh int ip set interface %s metric=0", cfgTunName),
+        fmt.Sprintf("netsh int ip set interface %s metric=0 store=persistent", cfgTunName),
     )
 
     // setup ipv6

@@ -20,7 +20,9 @@ type endpoint struct {
 }
 
 func NewEndpoint(tun io.ReadWriteCloser) *endpoint {
-    return &endpoint{tun: tun, mtu: 1500}
+    // Wintun 默认 MTU 65535
+    // 使用多大，由 gvisor 协商
+    return &endpoint{tun: tun, mtu: 1500*6}
 }
 
 // space reserved for front header.
